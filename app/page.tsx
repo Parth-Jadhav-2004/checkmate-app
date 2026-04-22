@@ -47,7 +47,9 @@ export default function HomePage() {
   }
 
   const getBreadcrumbItems = () => {
-    const items = [{ label: "Home", onClick: () => handleNavigate("home") }]
+    const items: Array<{label: string, onClick?: () => void, isActive?: boolean}> = [
+      { label: "Home", onClick: () => handleNavigate("home") }
+    ]
 
     if (currentView === "upload") {
       items.push({

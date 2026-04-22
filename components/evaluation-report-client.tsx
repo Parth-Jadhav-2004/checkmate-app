@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { QRCodeCanvas } from "qrcode.react";
 import { 
   Breadcrumb, 
   BreadcrumbItem, 
@@ -36,7 +37,8 @@ import {
   Download,
   Edit,
   Save,
-  X
+  X,
+  ShieldCheck
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -50,6 +52,7 @@ interface EvaluationData {
     evaluationStatus: string;
     submittedAt: string;
     evaluatedAt: string;
+    verificationHash?: string;
   };
   student: {
     id: string;
@@ -98,6 +101,11 @@ export function EvaluationReportClient({ evaluationData, studentId }: Evaluation
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedMarks, setEditedMarks] = useState<Record<string, number>>({});
   const [isSaving, setIsSaving] = useState(false);
+  const [baseUrl, setBaseUrl] = useState("");
+
+  useEffect(() => {
+    setBaseUrl(window.location.origin);
+  }, []);
 
   const getGradeColor = (grade: string) => {
     if (grade === "A+" || grade === "A") return "bg-green-600";
@@ -416,6 +424,26 @@ export function EvaluationReportClient({ evaluationData, studentId }: Evaluation
             </Button>
           </CardContent>
         </Card>
+
+        {evaluationData.answerSheet.verificationHash && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-green-600" />
+                Anti-Tamper Verify
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center justify-center pt-2">
+              <QRCodeCanvas 
+                value={evaluationData.answerSheet.verificationHash} 
+                size={84} 
+                level="M"
+                includeMargin={true}
+              />
+              <p className="text-[9px] font-bold text-primary mt-1 text-center uppercase tracking-wider">Scan to Verify</p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Question-wise Breakdown */}

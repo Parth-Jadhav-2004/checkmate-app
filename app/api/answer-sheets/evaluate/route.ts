@@ -15,8 +15,6 @@ async function splitIntoAnswers(
   try {
     console.log("🔪 Splitting text into individual answers...");
     
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
-    
     const prompt = `
 You are a text parsing expert. Split the following answer sheet text into individual question answers.
 
@@ -40,11 +38,12 @@ Return JSON in this exact format:
 }
 `;
 
+    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
     const result = await model.generateContent(prompt);
-    const response = result.response.text();
+    const responseText = result.response.text();
 
     // Parse JSON response
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error("Failed to parse split answers from AI response");
     }
@@ -80,61 +79,56 @@ async function extractTextFromPDF(pdfUrl: string): Promise<string> {
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     
-    console.log("🔄 Uploading PDF to Gemini File API...");
+    console.log("🔄 Attempting text extraction using pdf-parse...");
     
-    // Upload file to Gemini
-    const { GoogleAIFileManager } = require("@google/generative-ai/server");
-    const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY);
-    
-    // Write buffer to temporary file
-    const fs = require("fs");
-    const path = require("path");
-    const os = require("os");
-    const tempFilePath = path.join(os.tmpdir(), `answer-sheet-${Date.now()}.pdf`);
-    
-    fs.writeFileSync(tempFilePath, buffer);
-    
-    // Upload to Gemini
-    const uploadResult = await fileManager.uploadFile(tempFilePath, {
-      mimeType: "application/pdf",
-      displayName: "Student Answer Sheet",
-    });
-    
-    console.log(`✅ File uploaded: ${uploadResult.file.uri}`);
-    
-    // Clean up temp file
-    fs.unlinkSync(tempFilePath);
-    
-    // Extract text using Gemini 2.0 Flash Thinking
-    console.log("🤖 Extracting text using Gemini 2.0 Flash Thinking...");
-    
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
-    
-    const result = await model.generateContent([
-      {
-        fileData: {
-          fileUri: uploadResult.file.uri,
-          mimeType: uploadResult.file.mimeType,
+    let extractedText = "";
+
+    try {
+      // Stage 1: Try pdf-parse for digital (text-layer) PDFs
+      // Uses internal lib path to bypass pdf-parse v1 Next.js bug
+      const pdfParse = require("pdf-parse/lib/pdf-parse");
+      const data = await pdfParse(buffer);
+      extractedText = data.text.trim();
+      console.log("📊 pdf-parse extracted text length:", extractedText.length);
+    } catch (parseErr) {
+      console.warn("⚠️ pdf-parse failed, will fall back to vision model:", parseErr);
+    }
+
+    // Stage 2: If pdf-parse got nothing (scanned/image PDF), use a vision model
+    if (!extractedText || extractedText.length < 50) {
+      console.log("🖼️ PDF appears image-based. Using vision model (Gemini Flash) for OCR...");
+
+      const base64Pdf = buffer.toString("base64");
+
+      const visionModel = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+      
+      const visionResult = await visionModel.generateContent([
+        {
+          inlineData: {
+            data: base64Pdf,
+            mimeType: "application/pdf"
+          }
         },
-      },
-      "Extract all the text from this student's answer sheet in order. " +
-      "Preserve question numbering (Q1, Q2, etc.) if present. " +
-      "Include all written content, even if handwritten. " +
-      "Return the complete text as-is without any analysis or commentary.",
-    ]);
-    
-    const extractedText = result.response.text().trim();
-    
-    console.log("✅ Text extracted successfully");
-    console.log("📊 Extracted text length:", extractedText.length);
-    
+        "Extract all the text from this student's answer sheet in order. " +
+        "Preserve question numbering (Q1, Q2, 1., 2., etc.) if present. " +
+        "Include all written content, even if handwritten. " +
+        "Return the complete text as-is without any analysis or commentary."
+      ]);
+
+      extractedText = visionResult.response.text().trim() || "";
+      console.log("📊 Vision model extracted text length:", extractedText.length);
+    }
+
+    console.log("✅ Text extraction complete");
+
     if (!extractedText || extractedText.length < 10) {
       throw new Error(
-        "Could not extract sufficient text from PDF. The file might be empty or unreadable."
+        "Could not extract text from PDF. The file may be corrupted or completely empty."
       );
     }
     
     return extractedText;
+
   } catch (error) {
     console.error("❌ Error extracting text from PDF:", error);
     throw new Error(`Failed to extract text from PDF: ${error instanceof Error ? error.message : "Unknown error"}`);
@@ -300,6 +294,12 @@ export async function POST(request: NextRequest) {
       console.log("✅ Detailed results saved to evaluation_results table");
     }
     
+    // Generate Verification Hash
+    const crypto = require('crypto');
+    const evaluatedAt = new Date().toISOString();
+    const hashPayload = `${answerSheetId}-${totalAwarded}-${answerSheet.student.id}-${evaluatedAt}`;
+    const verificationHash = crypto.createHash('sha256').update(hashPayload).digest('hex');
+    
     // Step 8: Update answer sheet with summary
     await supabase
       .from("answer_sheets")
@@ -307,12 +307,13 @@ export async function POST(request: NextRequest) {
         total_marks: totalMarks,
         obtained_marks: totalAwarded,
         evaluation_status: "evaluated",
-        evaluated_at: new Date().toISOString(),
+        evaluated_at: evaluatedAt,
+        verification_hash: verificationHash,
         updated_at: new Date().toISOString(),
       })
       .eq("id", answerSheetId);
     
-    console.log("✅ Answer sheet updated with final score");
+    console.log(`✅ Answer sheet updated with final score and verification hash: ${verificationHash}`);
     
     return NextResponse.json({
       success: true,

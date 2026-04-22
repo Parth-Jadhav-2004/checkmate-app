@@ -85,8 +85,6 @@ export async function calculateContextSimilarity(
   studentAnswer: string
 ): Promise<number> {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
-
     const prompt = `
 You are an expert educational evaluator. Compare the following two answers and provide a similarity score.
 
@@ -112,11 +110,12 @@ Return JSON in this exact format:
 }
 `;
 
+    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
     const result = await model.generateContent(prompt);
-    const response = result.response.text();
+    const responseText = result.response.text();
 
     // Parse JSON response
-    const jsonMatch = response.match(/\{\s*"similarity"\s*:\s*([\d.]+)\s*\}/);
+    const jsonMatch = responseText.match(/\{\s*"similarity"\s*:\s*([\d.]+)\s*\}/);
     if (!jsonMatch) {
       console.warn("Failed to parse similarity score, using fallback");
       return 0.5; // Fallback score

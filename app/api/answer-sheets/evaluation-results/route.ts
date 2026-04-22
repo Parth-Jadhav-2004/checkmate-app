@@ -96,6 +96,7 @@ export async function GET(request: NextRequest) {
           evaluationStatus: answerSheet.evaluation_status,
           submittedAt: answerSheet.submitted_at,
           evaluatedAt: answerSheet.evaluated_at,
+          verificationHash: answerSheet.verification_hash,
         },
         student: {
           id: answerSheet.student.id,
