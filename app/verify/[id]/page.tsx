@@ -33,7 +33,10 @@ async function verifyAnswerSheet(id: string, providedHash: string | null) {
     // Server-side calculation verification (Blockchain-style verification)
     const crypto = require('crypto');
     const student = Array.isArray(sheet.student) ? sheet.student[0] : sheet.student;
-    const hashPayload = `${sheet.id}-${sheet.obtained_marks}-${student.id}-${sheet.evaluated_at}`;
+    // Normalize the timestamp to ISO string format (with "Z" suffix) to match
+    // what was used during hash generation: new Date().toISOString()
+    const normalizedEvaluatedAt = new Date(sheet.evaluated_at).toISOString();
+    const hashPayload = `${sheet.id}-${sheet.obtained_marks}-${student.id}-${normalizedEvaluatedAt}`;
     const calculatedHash = crypto.createHash('sha256').update(hashPayload).digest('hex');
 
     const isVerified = calculatedHash === providedHash && sheet.verification_hash === providedHash;

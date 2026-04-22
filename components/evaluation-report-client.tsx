@@ -38,7 +38,8 @@ import {
   Edit,
   Save,
   X,
-  ShieldCheck
+  ShieldCheck,
+  RotateCcw
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -101,6 +102,7 @@ export function EvaluationReportClient({ evaluationData, studentId }: Evaluation
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedMarks, setEditedMarks] = useState<Record<string, number>>({});
   const [isSaving, setIsSaving] = useState(false);
+  const [isReEvaluating, setIsReEvaluating] = useState(false);
   const [baseUrl, setBaseUrl] = useState("");
 
   useEffect(() => {
@@ -120,6 +122,46 @@ export function EvaluationReportClient({ evaluationData, studentId }: Evaluation
     if (remark.includes("Very good")) return "text-blue-600";
     if (remark.includes("Partially")) return "text-yellow-600";
     return "text-red-600";
+  };
+
+  const handleReEvaluate = async () => {
+    const confirmed = window.confirm(
+      "Are you sure you want to re-evaluate this answer sheet? This will replace all current marks and regenerate the verification hash."
+    );
+    if (!confirmed) return;
+
+    setIsReEvaluating(true);
+    try {
+      const response = await fetch('/api/answer-sheets/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answerSheetId: evaluationData.answerSheet.id }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Re-evaluation failed');
+      }
+
+      toast({
+        title: "Re-evaluation Complete",
+        description: "The answer sheet has been re-evaluated successfully. Refreshing...",
+      });
+
+      // Refresh the page to show updated data
+      router.refresh();
+      // Small delay to allow server data to update before full reload
+      setTimeout(() => window.location.reload(), 500);
+    } catch (error) {
+      console.error('Re-evaluation error:', error);
+      toast({
+        title: "Re-evaluation Failed",
+        description: error instanceof Error ? error.message : "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsReEvaluating(false);
+    }
   };
 
   const handleEditClick = () => {
@@ -304,7 +346,17 @@ export function EvaluationReportClient({ evaluationData, studentId }: Evaluation
                 </>
               ) : (
                 <>
-                  <Button onClick={handleEditClick} variant="outline" size="sm">
+                  <Button 
+                    onClick={handleReEvaluate} 
+                    variant="outline" 
+                    size="sm"
+                    disabled={isReEvaluating}
+                    className="border-orange-500 text-orange-600 hover:bg-orange-50"
+                  >
+                    <RotateCcw className={`h-4 w-4 mr-2 ${isReEvaluating ? 'animate-spin' : ''}`} />
+                    {isReEvaluating ? "Re-evaluating..." : "Re-evaluate"}
+                  </Button>
+                  <Button onClick={handleEditClick} variant="outline" size="sm" disabled={isReEvaluating}>
                     <Edit className="h-4 w-4 mr-2" />
                     Edit Marks
                   </Button>

@@ -271,7 +271,19 @@ export async function POST(request: NextRequest) {
     
     console.log(`\n🎉 Evaluation complete! Score: ${totalAwarded}/${totalMarks}`);
     
-    // Step 7: Save detailed evaluation results to database
+    // Step 7: Delete any existing evaluation results (for re-evaluation)
+    const { error: deleteError } = await supabase
+      .from("evaluation_results")
+      .delete()
+      .eq("answer_sheet_id", answerSheetId);
+
+    if (deleteError) {
+      console.warn("⚠️ Error clearing old evaluation results:", deleteError);
+    } else {
+      console.log("🧹 Cleared previous evaluation results (if any)");
+    }
+
+    // Step 8: Save detailed evaluation results to database
     const evaluationRecords = evaluationResults.map((result) => ({
       answer_sheet_id: answerSheetId,
       question_id: result.questionId,
@@ -297,7 +309,8 @@ export async function POST(request: NextRequest) {
     // Generate Verification Hash
     const crypto = require('crypto');
     const evaluatedAt = new Date().toISOString();
-    const hashPayload = `${answerSheetId}-${totalAwarded}-${answerSheet.student.id}-${evaluatedAt}`;
+    const studentData = Array.isArray(answerSheet.student) ? answerSheet.student[0] : answerSheet.student;
+    const hashPayload = `${answerSheetId}-${totalAwarded}-${studentData.id}-${evaluatedAt}`;
     const verificationHash = crypto.createHash('sha256').update(hashPayload).digest('hex');
     
     // Step 8: Update answer sheet with summary
