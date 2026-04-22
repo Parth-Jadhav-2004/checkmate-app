@@ -434,12 +434,16 @@ export function EvaluationReportClient({ evaluationData, studentId }: Evaluation
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col items-center justify-center pt-2">
-              <QRCodeCanvas 
-                value={evaluationData.answerSheet.verificationHash} 
-                size={84} 
-                level="M"
-                includeMargin={true}
-              />
+              {baseUrl ? (
+                <QRCodeCanvas 
+                  value={`${baseUrl}/verify/${evaluationData.answerSheet.id}?hash=${evaluationData.answerSheet.verificationHash}`} 
+                  size={84} 
+                  level="M"
+                  includeMargin={true}
+                />
+              ) : (
+                <div style={{ width: 84, height: 84 }} className="bg-muted animate-pulse" />
+              )}
               <p className="text-[9px] font-bold text-primary mt-1 text-center uppercase tracking-wider">Scan to Verify</p>
             </CardContent>
           </Card>
